@@ -1,0 +1,581 @@
+---
+title: Análise descritiva dos casos de oncologia no SUS em Maringá-PR
+
+# use letras para afiliacao
+author:
+  - name: Makson Pedro Rodrigues
+    affiliation: a,b
+  - name: Emanuel Carneiro F. da Silva
+    affiliation: a,b
+  - name: Vanessa Midori Kurata
+    affiliation: c,d
+  - name: Andressa Nunes Siroky
+    affiliation: a,e
+address:
+  - code: a
+    address: Departamento de Estatística - UFRN
+  - code: b
+    address: Consultor
+  - code: c
+    address: Prefeitura Municipal de Maringá
+  - code: d
+    address: Consulente
+  - code: e
+    address: Orientação
+
+# area do conhecimento (pelo menos uma)
+subject:
+  - "Estatística Aplicada à Saúde"
+
+# palavras-chave
+keywords:
+  - Estatística descritiva
+  - Sistema único de Saúde (SUS)
+  - Oncologia
+
+# resumo - note a barra vertical e os dois espaços no início do parágrafo
+abstract: |
+  Este relatório apresenta uma análise descritiva dos dados relacionados aos casos de oncologia nos serviços de saúde do Sistema Único de Saúde (SUS) em Maringá-PR e proximidades, com o objetivo de oferecer uma visão mais clara e panorâmica do sistema. 
+
+# arquivo com a bibliografia do relatorio
+bibliography: modeloLEA.bib
+
+output: 
+  bookdown::pdf_book:
+    base_format: modeloLEA::relatorio
+    latex_engine: xelatex
+header-includes:
+  - \usepackage{indentfirst}
+  - \usepackage{booktabs}
+  - \usepackage{graphicx}
+---
+
+```{r definicoes, include = FALSE, message = FALSE}
+# pacotes a serem carregados para a analise
+library(tidyverse)
+theme_set(theme_bw())
+library(performance)
+library(knitr)
+library(kableExtra)
+library(scales)
+# definicoes globais 
+# tamanho das figuras: largura = 5, altura = 4 (polegadas)
+opts_chunk$set(fig.width = 5, fig.height = 4, 
+# exibir o codigo do R nos chunks (mudar para FALSE na versao final)
+               echo = F, message=F, warning=F,
+# mandar o latex manter a figura na posicao correta
+               fig.pos = 'h')
+
+library(tidyverse)
+library(janitor)
+library(geobr)
+library(sf)
+
+
+```
+
+# Objetivos
+
+No Brasil, o Sistema Único de Saúde (SUS) constitui a principal porta de acesso da população aos serviços de saúde, abrangendo desde ações preventivas até o tratamento de doenças complexas, como o câncer. A análise de dados desempenha papel fundamental na identificação de padrões em saúde pública, possibilitando a elaboração de estratégias mais eficientes para a gestão adequada dos recursos \cite{livroSUS}.
+
+O presente relatório tem como objetivo realizar uma análise descritiva de informações relacionadas à oncologia no SUS, com foco na cidade de Maringá-PR e regiões vizinhas, durante o ano de **2024**. A partir de bases de dados públicos fornecidas pela consulente, foram exploradas variáveis como número de casos diagnosticados, início de tratamento, valores aprovados mensalmente, municípios com mais casos, tipos de câncer registrados, estágios da doença e distribuição por faixa etária e sexo. O intuito principal é oferecer uma visão clara e acessível sobre o cenário regional do atendimento oncológico no período avaliado, auxiliando na identificação de padrões relevantes.
+
+# Metodologia
+
+O conjunto de dados fornecido pela consulente abrange 58 municípios, dos quais apenas Maringá possui hospitais habilitados para o tratamento oncológico, sendos eles Hospital do Câncer e Hospital de Santa Rita. As demais cidades, por serem de menor porte, encaminham seus pacientes para esses dois centros de referência. A distribuição geográfica dos municípios analisados pode ser visualizada na Figura \ref{fig:mapa}.
+
+```{r mapa, fig.cap="\\label{fig:mapa}Mapa dos municípios do estado do Paraná.", fig.align="center", cache=T, fig.height=3}
+
+load("dados_limpo.RData")
+
+parana <- read_municipality(code_muni = "PR", year = 2020)
+
+faixa_etaria <- faixa_etaria |> 
+  mutate(munici_pio_da_residencia = str_trim(munici_pio_da_residencia))
+
+parana <- parana |>
+  mutate(name_muni_clean = stringi::stri_trans_general(name_muni, "Latin-ASCII"))
+
+parana <- parana |>
+  mutate(destacado = name_muni_clean %in% unique(faixa_etaria$munici_pio_da_residencia))
+
+# Mapa
+ggplot(parana) +
+  geom_sf(aes(fill = destacado), color = "white", size = 0.1) +
+  scale_fill_manual(values = c("TRUE" = "red", "FALSE" = "gray90"),
+                    labels = c("TRUE" = "Selecionados", "FALSE" = "Outros"),
+                    name = "Legenda:") +
+  theme_minimal()
+
+```
+
+Toda a análise foi conduzida com o uso da linguagem R \cite{R2017}, por possuir funções úteis para elaboração de gráficos, tabelas e estatísticas mais personalizadas, os dados analisados abrangem informações sobre faixa etária, sexo, número de estadiamentos, tipos de câncer e outras variáveis mensais, como número de diagnósticos, inícios de tratamento e valores aprovados pelo Estado. É importante destacar que todas essas variáveis estão segmentadas por município.
+
+Um dos objetivos da consultoria era realizar uma análise envoltória \cite{livro}, uma metodologia que avalia a eficiência comparativa de unidades, baseando-se em múltiplos insumos e produtos. Todavia, essa análise não pôde ser realizada devido à limitação de dados disponíveis.
+
+Também foram fornecidos dados detalhados sobre o Hospital do câncer e Hospital de Santa Rita, com o objetivo de realizar uma análise envoltória – ou seja, avaliar a eficiência de cada unidade hospitalar considerando variáveis como salários médicos, número de leitos, equipe de enfermagem, casos mensais, tempo de espera, entre outros indicadores. No entanto, para que essa análise seja mais robusta e comparável, é necessário dispor de uma base de dados mais ampla, composta por diversos hospitais oncológicos a nível nacional.
+
+# Resultados
+
+Iniciando pela análise de variáveis mais identitárias, como sexo e idade (Figuras \ref{fig:sexo} e \ref{fig:idade}, respectivamente), observa-se nestes dados que há mais casos de câncer em mulheres. Apenas 13 municípios registraram um número maior de casos em homens. Além disso, como já era esperado, a maioria dos diagnósticos ocorreu entre pessoas mais velhas.
+
+```{r sexo, cache=T, fig.cap="\\label{fig:sexo}Número de casos totais de câncer por sexo.", fig.align='center'}
+
+sexo_long <- sexo |> 
+  pivot_longer(cols = c(masculino, feminino, total),
+               names_to = "sexo",
+               values_to = "valor")
+
+total_geral <- sexo_long |> 
+  filter(munici_pio_da_residencia == "Total", sexo != "total") |> 
+  summarise(total = sum(valor, na.rm = TRUE)) |> 
+  pull(total)
+
+sexo_plot <- sexo_long |> 
+  filter(munici_pio_da_residencia == "Total", sexo != "total") |> 
+  mutate(sexo = str_to_title(sexo),
+         perc = (valor / total_geral) * 100,
+         label = paste0(valor, "\n(", round(perc, 1), "%)"))
+
+ggplot(sexo_plot, aes(x = sexo, y = valor)) +
+  geom_col(fill = "#22aaee", color = "black", width = 0.75) +
+  geom_text(aes(label = label), vjust = -0.3, size = 3.5) +
+  scale_y_continuous(
+    limits = c(0, max(sexo_plot$valor) * 1.2), 
+    breaks = seq(0, max(sexo_plot$valor) * 1.2, 500),
+    expand = expansion(mult = c(0, 0))
+  ) +
+  labs(x = "Sexo", y = NULL) +
+  theme_bw() +
+  theme(plot.title = element_text(hjust = 0.5, face = "bold", size = 10),
+        panel.grid = element_blank(),
+        panel.border = element_blank(),
+        axis.text.y = element_blank(),
+        axis.ticks.y = element_blank(),
+        axis.line.x = element_line(color = "black"),
+        axis.title.x = element_text(face = "bold"))
+```
+
+```{r idade, cache=T, fig.cap="\\label{fig:idade}Número de casos totais de câncer por idade.", fig.align='center', fig.width=8, fig.height=6, out.width="80%"}
+
+
+faixa_etaria <- faixa_etaria |>
+  pivot_longer(
+    cols = -munici_pio_da_residencia,
+    names_to = "faixa_etaria",
+    values_to = "frequencia"
+  ) |> 
+  filter(faixa_etaria != "total") |> 
+  mutate(
+    faixa_etaria = faixa_etaria |> 
+      str_replace_all("^x", "") |>    
+      str_replace_all("_a_", " a ") |>    
+      str_replace_all("_anos", "") |> 
+      str_replace_all("_", " "),            
+    faixa_etaria = ifelse(
+      str_detect(faixa_etaria, "^80"),
+      "80 ou mais",
+      faixa_etaria
+    )
+  )
+
+faixa_etaria_plot <- faixa_etaria |> 
+  filter(munici_pio_da_residencia == "Total") |> 
+  mutate(
+    total_geral = sum(frequencia, na.rm = TRUE),
+    perc = (frequencia / total_geral) * 100,
+    label = paste0(frequencia, "\n(", round(perc, 1), "%)")
+  )
+
+ggplot(faixa_etaria_plot, aes(x = faixa_etaria, y = frequencia)) +
+  geom_col(fill = "#22aaee", color = "black", width = 1) +
+  geom_text(aes(label = label), vjust = -0.3, size = 4) +
+  scale_y_continuous(
+    limits = c(0, max(faixa_etaria_plot$frequencia) * 1.3), # aumenta 30% no topo
+    expand = expansion(mult = c(0, 0))
+  ) +
+  labs(title = NULL, x = "Idade (em anos)", y = NULL) +
+  theme_bw() +
+  theme(axis.text.x = element_text(angle = 90),
+        panel.grid = element_blank(),
+        panel.border = element_blank(),
+        axis.ticks.y = element_blank(),
+        axis.text.y = element_blank(),
+        axis.line.x = element_line(color = "black"),
+        axis.title.x = element_text(face = "bold"))
+```
+
+\newpage
+
+Agora, observa-se na tabela abaixo os municípios com maior concentração de casos oncológicos, bem como a porcentagem que cada um representa no total da região.
+
+```{r tabela1, cache=T}
+
+library(kableExtra)
+
+tabela_municipios <- tribble(
+  ~Município, ~`Porcentagem (%)`, ~`Total de casos`,
+  "Maringá", "35,2%", "1858",
+  "Paranavaí", "7,96%", "420",
+  "Sarandi", "6,61%", "349",
+  "Marialva", "3,90%", "206",
+  "Paiçandu", "3,83%", "202"
+)
+
+tabela_municipios |>
+  kbl(
+    format = "latex",
+    booktabs = TRUE,
+    align = c("l", "c", "c"),
+    caption = "Municípios com maior número de casos de câncer em 2024.",
+    label = "municipios"
+  ) |>
+  kable_styling(
+    latex_options = c("hold_position", "scale_down"),
+    font_size = 10,
+    position = "center"
+  )
+
+```
+
+A seguir, nas Tabelas 2 e 3, os dez tipos de câncer com mais casos diagnosticados em 2024 em toda região e também, exclusivamente, em Maringá.
+
+\newpage
+
+```{r tabela2, cache=T}
+
+# Dados com nomes simplificados
+df_total_top10 <- tribble(
+  ~`Tipo de câncer`, ~`Total de casos`,
+  "Incerto/desconhecido", 1301,
+  "Outras neoplasias da pele", 771,
+  "Mama", 436,
+  "Próstata", 242,
+  "Cólon", 191,
+  "Sem localização específica", 186,
+  "In situ do colo do útero", 141,
+  "Colo do útero", 131,
+  "Reto", 105,
+  "Outras neoplasias de comportamento incerto", 105
+)
+
+# Adicionando coluna de porcentagem
+df_total_top10 <- df_total_top10 |> 
+  mutate(
+    `Porcentagem (%)` = (`Total de casos` / sum(`Total de casos`)) * 100,
+    `Porcentagem (%)` = paste0(round(`Porcentagem (%)`, 1), "%")
+  )
+
+# Tabela formatada
+df_total_top10 |>
+  kbl(
+    format = "latex",
+    booktabs = TRUE,
+    align = c("l", "c", "c"),
+    caption = "Dez tipos de câncer mais frequentes na região em 2024."
+  ) |>
+  kable_styling(
+    latex_options = c("hold_position", "scale_down"),
+    font_size = 10,
+    position = "center"
+  )
+```
+
+```{r tabela3, cache=T}
+
+
+# Dados com nomes simplificados
+df_maringa_top10 <- tribble(
+  ~`Tipo de câncer`, ~`Total de casos`,
+  "Incerto/desconhecido", 539,
+  "Outras neoplasias da pele", 271,
+  "Mama", 164,
+  "Próstata", 89,
+  "Cólon", 75,
+  "In situ do colo do útero", 53,
+  "Sem localização específica", 52,
+  "Metástase em gânglios linfáticos", 47,
+  "Pulmões e brônquios", 38,
+  "Colo do útero", 34
+)
+
+# Adicionando coluna de porcentagem
+df_maringa_top10 <- df_maringa_top10 |> 
+  mutate(
+    `Porcentagem (%)` = (`Total de casos` / sum(`Total de casos`)) * 100,
+    `Porcentagem (%)` = paste0(round(`Porcentagem (%)`, 1), "%")
+  )
+
+# Tabela formatada
+df_maringa_top10 |>
+  kbl(
+    format = "latex",
+    booktabs = TRUE,
+    align = c("l", "c", "c"),
+    caption = "Dez tipos de câncer mais frequentes em Maringá em 2024."
+  ) |>
+  kable_styling(
+    latex_options = c("hold_position", "scale_down"),
+    font_size = 10,
+    position = "center"
+  )
+
+```
+
+\vspace{1cm}
+
+A Tabela 4 mostra quais estágios do câncer foram os mais comuns. O estágio 0 representa o início da doença, enquanto o estágio 4 indica uma fase mais avançada e grave. Percebe-se que os estágios mais iniciais da doença não são muito identificados, se diagnostiscando apenas quando se agrava.
+
+```{r tabela 4, cache=T}
+
+tabela_estagios <- tribble(
+  ~`Município`, ~`Estágio do câncer`, ~`Número de casos`, ~`Porcentagem (%)`,
+  "Total",   "Estágio 0",   "56",  "0,055",
+  "Total",   "Estágio 1",   "80",  "0,079",
+  "Total",   "Estágio 2",  "296",  "0,292",
+  "Total",   "Estágio 3",  "324",  "0,320",
+  "Total",   "Estágio 4",  "257",  "0,254",
+  "Maringá", "Estágio 0",   "13",  "0,035",
+  "Maringá", "Estágio 1",   "32",  "0,087",
+  "Maringá", "Estágio 2",  "114",  "0,311",
+  "Maringá", "Estágio 3",  "121",  "0,330",
+  "Maringá", "Estágio 4",   "87",  "0,237"
+) |>
+  mutate(`Porcentagem (%)` = str_replace(`Porcentagem (%)`, ",", "."),
+         `Porcentagem (%)` = as.numeric(`Porcentagem (%)`) * 100,
+         `Porcentagem (%)` = sprintf("%.1f%%", `Porcentagem (%)`))
+
+tabela_estagios |>
+  kbl(
+    format = "latex",
+    booktabs = TRUE,
+    align = c("l", "c", "c", "c"),
+    caption = "Número de casos de câncer em 2024 por estágio (Total e Maringá).",
+    label = "estagios"
+  ) |>
+  kable_styling(
+    latex_options = c("hold_position", "scale_down"),
+    font_size = 10,
+    position = "center"
+  )
+
+```
+
+\newpage
+
+As Figuras \ref{fig:diagnostico1} e \ref{fig:diagmaringa} apresentam gráficos de linhas comparando o número de casos diagnosticados com o número de inícios de tratamento ao longo dos meses de 2024. Observa-se que, em grande parte do período, o número de diagnósticos é bem superior ao de tratamentos iniciados, indicando uma defasagem entre detecção e início do tratamento. No entanto, essa diferença reduz-se bastante nos últimos meses do ano, sugerindo uma melhora na agilidade do sistema de atendimento.
+
+```{r diagnostico1, cache=T, fig.cap="\\label{fig:diagnostico1}Número de diagnósticos e inícios de tratamento por mês.", fig.align='center', fig.height=3, results='hide'}
+
+# diagnostico e tratamento
+dados_diag <- tratam_munic_mesdiagnostico |>
+  pivot_longer(
+    cols = -munici_pio_da_residencia, 
+    names_to = "mes", 
+    values_to = "frequencia"
+  ) |>
+  mutate(tipo = "Diagnóstico")
+
+dados_trat <- tratam_munic_mestratam |>
+  pivot_longer(
+    cols = -munici_pio_da_residencia, 
+    names_to = "mes", 
+    values_to = "frequencia"
+  ) |>
+  mutate(tipo = "Início de Tratamento")
+
+dados_juntos <- bind_rows(dados_diag, dados_trat)
+
+dados_juntos <- dados_juntos |>
+  filter(mes != "total") |> 
+  mutate(
+    mes = dmy(paste0("01_", mes))  # Ex.: "01_jan_2024" vira 2024-01-01
+  )
+
+Sys.setlocale("LC_ALL", "Portuguese")
+
+
+dados_juntos |>
+  filter(munici_pio_da_residencia == "Total") |>
+  ggplot(aes(x = mes, y = frequencia, color = tipo)) +
+  geom_line(linewidth = 1) +
+  geom_point(size = 2) +
+  labs(x = "Mês", y = "Frequência", color = "Tipo") +
+  scale_color_manual(values = c("Diagnóstico" = "#22aaee", "Início de Tratamento" = "#e63946")) +
+  scale_y_continuous(limits = c(0, 750)) +
+  theme_bw() +
+  theme(axis.title.x = element_text(face = "bold"),
+        axis.title.y = element_text(face = "bold"))
+
+
+```
+
+```{r diagmaringa, cache=T, fig.cap="\\label{fig:diagmaringa}Número de diagnósticos e inícios de tratamento por mês (apenas Maringá).", fig.align='center', fig.height=3}
+
+dados_juntos |>
+  filter(munici_pio_da_residencia == " Maringa") |>
+  ggplot(aes(x = mes, y = frequencia, color = tipo)) +
+  geom_line(linewidth = 1) +
+  geom_point(size = 2) +
+  labs(x = "Mês", y = "Frequência", color = "Tipo") +
+  scale_color_manual(values = c("Diagnóstico" = "#22aaee", "Início de Tratamento" = "#e63946")) +
+  scale_y_continuous(limits = c(0, 200)) +
+  theme_bw() +
+  theme(axis.title.x = element_text(face = "bold"),
+        axis.title.y = element_text(face = "bold"))
+
+
+
+```
+
+\newpage
+
+Por fim, como mostram as Figuras \ref{fig:custo} e \ref{fig:custo2}, é nítido perceber uma queda no valor aprovado pelo Estado em abril de 2024. Isso aconteceu, em parte, por causa da redução em Maringá, que foi de pouco mais de R\$ 100 mil. No mês seguinte, no entanto, os valores já voltaram a subir. Nos meses seguintes, o custo total continuou aumentando, influenciado também pelo crescimento nos demais municípios. Na Figura \ref{fig:dispersao1}, percebe-se que a relação número de casos com valor aprovado é linear, com correlação consideravelmente próxima de 1 (aproximadamente 0,996), indicando uma distribuição de ementas proporcionalmente lineares.
+
+```{r custo, cache=T, fig.cap="\\label{fig:custo}Valor total aprovado pelo governo para realização de consultas e tratamentos oncológicos.", fig.height=3, fig.align='center'}
+
+valor_aprovado <- valor_aprovado |> 
+  rename(
+    jan = janeiro,
+    fev = fevereiro,
+    mar = marco,
+    abr = abril,
+    mai = maio,
+    jun = junho,
+    jul = julho,
+    ago = agosto,
+    set = setembro,
+    out = outubro,
+    nov = novembro,
+    dez = dezembro
+  )
+
+dados_valor_aprovado <- valor_aprovado |> 
+  select(-total) |>   
+  pivot_longer(
+    cols = -municipio,
+    names_to = "mes",
+    values_to = "valor_aprovado"
+  ) |> 
+  mutate(
+    mes_num = as.integer(factor(mes, 
+      levels = c("jan", "fev", "mar", "abr", "mai", "jun",
+                 "jul", "ago", "set", "out", "nov", "dez"))),
+    data = dmy(paste0("01/", mes_num, "/2024"))
+  )
+
+dados_valor_aprovado <- dados_valor_aprovado |> 
+  mutate(municipio = str_trim(municipio))
+
+dados_valor_aprovado <- dados_valor_aprovado |> 
+  mutate(valor_aprovado = valor_aprovado/1000000)
+
+dados_valor_aprovado |> 
+  filter(municipio == "Total") |> 
+  ggplot(aes(x = data, y = valor_aprovado, group = municipio, 
+             color = municipio)) +
+    geom_line(linewidth = 1, colour = "#22aaee") +
+    geom_point(size = 2, colour = "#22aaee") +
+    labs(x = "Mês", y = "Valor Aprovado (milhões de reais)", color = "Município") +
+  theme_bw() +
+  theme(axis.title.x = element_text(face = "bold"),
+        axis.title.y = element_text(face = "bold"))
+
+```
+
+```{r custo2, cache=T, fig.cap="\\label{fig:custo2}Valores aprovados pelo governo para realização de consultas e tratamentos oncológicos: Comparação entre Maringá e os demais municípios (excluindo Maringá).", fig.align='center', fig.height=3}
+
+dados_maringa <- dados_valor_aprovado |> 
+  filter(municipio == "Maringa")
+
+dados_outros <- dados_valor_aprovado |> 
+  filter(!municipio %in% c("Maringa", "Total")) |>
+  group_by(mes, mes_num) |>
+  summarise(valor_aprovado = sum(valor_aprovado, na.rm = TRUE), .groups = "drop") |>
+  mutate(municipio = "Demais municípios", data = dmy(paste0("01/", mes_num, "/2024")))
+
+dados_comparacao <- bind_rows(dados_maringa, dados_outros)
+
+dados_comparacao <- dados_comparacao |> 
+  mutate(municipio = ifelse(municipio == "Maringa", "Maringá", municipio))
+
+ggplot(dados_comparacao, aes(x = data, y = valor_aprovado, color = municipio, group = municipio)) +
+  geom_line(linewidth = 1) +
+  geom_point(size = 2) +
+  labs(x = "Mês", y = "Valor Aprovado (milhões de reais)", color = "Município") +
+  theme_bw() +
+  theme(axis.title.x = element_text(face = "bold"),
+        axis.title.y = element_text(face = "bold"))
+
+```
+
+```{r dispersao1, cache=T, fig.cap="\\label{fig:dispersao1}Número de casos diagnosticados vs Valor aprovado (por município em 2024).", fig.height=3, fig.align='center'}
+
+valor_aprovado <- valor_aprovado |> 
+  mutate(municipio = str_trim(municipio))
+tratam_munic_mesdiagnostico <- tratam_munic_mesdiagnostico |> 
+  mutate(munici_pio_da_residencia = str_trim(munici_pio_da_residencia))
+
+casos_diagnosticados <- tratam_munic_mesdiagnostico |> 
+  rename(municipio = munici_pio_da_residencia) |> 
+  select(municipio, total)
+
+
+valor_diagnostico <- left_join(valor_aprovado |> select(municipio, total), 
+                               casos_diagnosticados, by = "municipio")
+
+valor_diagnostico <- valor_diagnostico |> 
+  mutate(total.x = total.x/1000000)
+
+valor_diagnostico |> 
+  filter(municipio != "Total") |> 
+  ggplot(aes(x = total.y, y = total.x, label = municipio)) +
+  geom_point(color = "red", size = 1) +
+    geom_smooth(method = "lm", se = FALSE, color = "blue", linetype = "dashed", size = 0.3) +
+  labs(
+      x = "Número de casos diagnosticados",
+      y = "Valor aprovado (milhões de reais)") +
+  theme_bw() +
+  theme(axis.title.x = element_text(face = "bold"),
+        axis.title.y = element_text(face = "bold"))
+
+
+```
+
+```{r tabela 5, cache=T}
+tabela_final_latex <- tribble(
+  ~`Município`, ~`Número de casos`, ~`Valor total aprovado`, ~`Média por caso`,
+  "Itaguaje",                    "22",   "R$ 180.106",  "R$ 8.187",
+  "Presidente Castelo Branco",   "27",   "R$ 45.002",  "R$ 1.667",
+  "Geral (região)",              "5278",  "R$ 25.257.642",  "R$ 4.785"
+)
+
+tabela_final_latex |>
+  kbl(
+    format = "latex",
+    booktabs = TRUE,
+    align = c("l", "c", "c", "c"),
+    caption = "Média de valor aprovado por caso oncológico: maior, menor e geral da região.",
+    label = "media",
+    escape = TRUE
+  ) |>
+  kable_styling(
+    latex_options = c("hold_position", "scale_down"),
+    font_size = 10,
+    position = "center"
+  )
+```
+
+O ponto em destaque na Figura (\ref{fig:dispersao1}) é Maringá, que se destaca pelo alto número de casos e, consequentemente, pelo alto valor. Mesmo assim, ele segue a tendência de correlação linear observada na dispersão dos dados. Na Tabela 5, mostra a média de gasto por caso, o valor chegou a R\$ 4.785,00 aprovados por caso oncológico. A cidade de Itaguajé detém a maior média dentre a região, sendo a única a alcançar R\$ 8.187,00, e a cidade com menor média foi Presidente Castelo Branco com média de R\$ 1.667,00.
+
+
+
+\newpage
+
+**Importante**: As escalas dos gráficos nas Figuras (\ref{fig:custo}) e (\ref{fig:custo2}) não iniciam no zero no eixo y, com o propósito de destacar melhor as diferenças de custo. Essa decisão se justifica pelo fato de que os custos analisados são todos superiores a um milhão de reais, enquanto as variações entre eles costumam ser pequenas. Iniciar o eixo em zero dificultaria a visualização dessas variações sutis, que são relevantes para a análise.
+
+# Conclusões
+
+Com base nas tabelas e gráficos apresentados, é possível afirmar que uma análise mais aprofundada, como a aplicação de modelos de séries temporais para observar a variação no número de diagnósticos e tratamentos ao longo dos meses, exigiria um conjunto de dados mais completo. O ideal seria contar com informações de um período maior, além de dados de outras regiões do Paraná ou até mesmo de outros estados, permitindo comparações mais amplas e melhores. Essa mesma necessidade se aplica a uma análise envoltória de dados (DEA), que depende da diversidade e abrangência das informações dos hospitais para gerar resultados mais confiáveis.
+
+No geral, como era de se esperar, Maringá se destaca com um valor aprovado pelo Estado bem mais alto do que os demais municípios da região, concentrando cerca de 35% dos casos. Por isso, ele recebeu mais atenção nas análises. Outro ponto que vale destacar é que, nos últimos meses do ano, a diferença entre os diagnósticos de câncer e os inícios de tratamento foi consideravelmente menor.
