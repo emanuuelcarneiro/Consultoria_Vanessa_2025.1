@@ -1,0 +1,548 @@
+---
+title: Análise descritiva dos casos de oncologia no SUS em Maringá-PR
+subtitle: Apresentação (Parcial|Final)
+author: Makson Pedro Rodrigues, Emanuel Carneiro F. da Silva
+date: 17 de Junho de 2025
+institute: LEA - Laboratório de Estatística Aplicada
+output: modeloLEA::apresentacao
+fontsize: 12pt
+bibliography: referencias.bib
+nocite: '@*'
+---
+
+```{r,setup, include=FALSE}
+library(tidyverse)
+theme_set(theme_bw())
+library(performance)
+library(knitr)
+library(kableExtra)
+
+
+# definicoes globais 
+# tamanho das figuras: largura = 5, altura = 4 (polegadas)
+
+opts_chunk$set(fig.width = 5, fig.height = 4, 
+# exibir o codigo do R nos chunks (mudar para FALSE na versao final)
+               echo = F, message=F, warning=F,
+# mandar o latex manter a figura na posicao correta
+               fig.pos = 'h')
+
+library(tidyverse)
+library(janitor)
+library(geobr)
+library(sf)
+
+## Ajeitar as figuras
+
+opts_chunk$set(fig.width = 4, 
+               fig.height = 2.5,
+               # centralizar as figuras
+               fig.align = "center",
+               # nao exibir o codigo do R nos chunks (mudar para FALSE na versao final)
+               echo = FALSE, 
+               # nao exibir mensagens dos pacotes
+               message = FALSE, cache = TRUE, warning = FALSE)
+
+
+```
+
+# Roteiro
+
+## Roteiro
+
+1. Apresentação
+2. Objetivos
+3. Metodologia
+4. Resultados
+5. Conclusões
+
+
+
+
+# Apresentação
+
+## Apresentação
+
+* Makson Pedro Rodrigues
+* Emanuel Carneiro F. da Silva
+* Consulente: Vanessa Midori Kurata, Prefeitura Municipal de Maringá
+* Andressa Nunes Siroky foi a professora orientadora deste trabalho
+
+
+# Objetivos
+
+## Objetivos
+
+* Realizar uma análise descritiva de informações relacionadas à oncologia no SUS, com foco na cidade de Maringá-PR e regiões vizinhas, durante o ano de 2024 
+*  Identificar municípios com maior concentração de casos
+* Caracterizar os tipos de câncer registrados e estágios da doença
+* Examinar a distribuição por faixa etária e sexo
+* Oferecer uma visão clara e acessível sobre o cenário regional do atendimento oncológico
+
+
+
+# Metodologia
+
+## Metodologia
+
+* 58 municípios da região de Maringá-PR
+* Bases de dados fornecidas pela consulente (Ano de 2024)
+* Variáveis: faixa etária, sexo, tipos de câncer, estágios da doença, diagnósticos, inícios de tratamento, valores aprovados pelo Estado
+* Tipo de análise: Estatística descritiva
+* Software utilizado: Linguagem R
+
+## Metodologia
+
+```{r mapa, fig.cap="\\label{fig:mapa}Mapa dos municípios do estado do Paraná.", fig.align="center", cache=T, fig.height=3, dpi=300,out.width="80%", fig.height=6, fig.width= 8, dpi=300}
+
+load("dados_limpo.RData")
+
+parana <- read_municipality(code_muni = "PR", year = 2020)
+
+faixa_etaria <- faixa_etaria |> 
+  mutate(munici_pio_da_residencia = str_trim(munici_pio_da_residencia))
+
+parana <- parana |>
+  mutate(name_muni_clean = stringi::stri_trans_general(name_muni, "Latin-ASCII"))
+
+parana <- parana |>
+  mutate(destacado = name_muni_clean %in% unique(faixa_etaria$munici_pio_da_residencia))
+
+# Mapa
+ggplot(parana) +
+  geom_sf(aes(fill = destacado), color = "white", size = 0.1) +
+  scale_fill_manual(values = c("TRUE" = "red", "FALSE" = "gray90"),
+                    labels = c("TRUE" = "Selecionados", "FALSE" = "Outros"),
+                    name = "Legenda:") +
+  theme_minimal()
+
+```
+
+
+# Resultados
+
+## Resultados
+
+```{r sexo, cache=T, fig.cap="\\label{fig:sexo}Número de casos totais de câncer por sexo.", fig.align='center', dpi=300, out.width="80%", fig.height=6, fig.width= 8}
+
+sexo <- sexo |> 
+  pivot_longer(cols = c(masculino, feminino, total),
+               names_to = "sexo",
+               values_to = "valor") |> 
+  pivot_wider(names_from = munici_pio_da_residencia,
+              values_from = valor)
+
+# gráfico sexo
+sexo |>
+  mutate(sexo = str_to_title(sexo)) |> 
+  filter(sexo != "Total") |> 
+  ggplot(aes(x = sexo, y = Total)) +
+  geom_col(fill = "#22aaee", color = "black", width = 0.75) +
+  geom_text(aes(label = Total), vjust = -0.5) +
+  scale_y_continuous(breaks = seq(0, 125, 25), 
+                     expand = expansion(mult = c(0, 0.1))) +
+  labs(x = "Sexo", y = NULL, title = "") +
+  theme_bw() +
+  theme(plot.title = element_text(hjust = 0.5, face = "bold", size = 10),
+        panel.grid = element_blank(),
+        panel.border = element_blank(),
+        axis.text.y = element_blank(),
+        axis.ticks.y = element_blank(),
+        axis.line.x = element_line(color = "black"),
+        axis.title.x = element_text(face = "bold")
+  )
+
+```
+
+
+
+
+
+## Resultados
+
+```{r idade, cache=T, fig.cap="\\label{fig:idade}Número de casos totais de câncer por idade.", fig.align='center', dpi=300, out.width="80%", fig.height=6, fig.width=8}
+
+
+faixa_etaria <- faixa_etaria |>
+  pivot_longer(
+    cols = -munici_pio_da_residencia,
+    names_to = "faixa_etaria",
+    values_to = "frequencia"
+  ) |> 
+  filter(faixa_etaria != "total")
+
+faixa_etaria <- faixa_etaria |> 
+  mutate(
+    faixa_etaria = faixa_etaria |> 
+      str_replace_all("^x", "") |>    
+      str_replace_all("_a_", " a ") |>    
+      str_replace_all("_anos", "") |> 
+      str_replace_all("_", " "),            
+      faixa_etaria = ifelse(
+       str_detect(faixa_etaria, "^80"),
+       "80 ou mais",
+       faixa_etaria
+      )
+    )
+
+# gráfico faixa etária  
+faixa_etaria |>
+  filter(munici_pio_da_residencia == "Total") |>
+  ggplot(aes(x = faixa_etaria, y = frequencia)) +
+  geom_col(fill = "#22aaee", color = "black", width = 1) +
+  geom_text(aes(label = frequencia), vjust = -0.3, 
+                size = 3.5) +
+  labs(title = NULL, x = "Idade (em anos)", y = NULL) +
+  theme_bw() +
+  theme(axis.text.x = element_text(angle = 90),
+        panel.grid = element_blank(),
+        panel.border = element_blank(),
+        axis.ticks.y = element_blank(),
+        axis.text.y = element_blank(),
+        axis.line.x = element_line(color = "black"),
+        axis.title.x = element_text(face = "bold")
+        )
+
+```
+
+
+## Resultados 
+
+
+
+```{r tabela1, cache=T}
+
+library(kableExtra)
+
+tabela_municipios <- tribble(
+  ~Município, ~`Porcentagem (%)`, ~`Total de casos`,
+  "Maringá", "35,2", "1858",
+  "Paranavaí", "7,96", "420",
+  "Sarandi", "6,61", "349",
+  "Marialva", "3,90", "206",
+  "Paiçandu", "3,83", "202"
+)
+
+tabela_municipios |>
+  kbl(
+    format = "latex",
+    booktabs = TRUE,
+    align = c("l", "c", "c"),
+    caption = "Municípios com maior número de casos de câncer em 2024.",
+    label = "municipios"
+  ) |>
+  kable_styling(
+    latex_options = c("hold_position", "scale_down"),
+    font_size = 10,
+    position = "center"
+  )
+
+```
+
+## Resultados
+
+```{r tabela2, cache=T}
+
+# Tabela com nomes simplificados
+df_total_top10 <- tribble(
+  ~`Tipo de câncer`, ~`Total de casos`,
+  "Incerto/desconhecido", 1301,
+  "Outras neoplasias da pele", 771,
+  "Mama", 436,
+  "Próstata", 242,
+  "Cólon", 191,
+  "Sem localização específica", 186,
+  "In situ do colo do útero", 141,
+  "Colo do útero", 131,
+  "Reto", 105,
+  "Outras neoplasias de comportamento incerto", 105
+)
+
+# Gerando tabela LaTeX com boa formatação
+df_total_top10 |>
+  kbl(
+    format = "latex",
+    booktabs = TRUE,
+    align = c("l", "c"),
+    caption = "Dez tipos de câncer mais frequentes na região em 2024."
+  ) |>
+  kable_styling(
+    latex_options = c("hold_position", "scale_down"),
+    font_size = 10,
+    position = "center",
+    stripe_index = NULL
+  )
+
+
+
+```
+
+## Resultados
+
+```{r tabela3, cache=T}
+
+
+# Dados com nomes simplificados
+df_maringa_top10 <- tribble(
+  ~`Tipo de câncer`, ~`Total de casos`,
+  "Incerto/desconhecido", 539,
+  "Outras neoplasias da pele", 271,
+  "Mama", 164,
+  "Próstata", 89,
+  "Cólon", 75,
+  "In situ do colo do útero", 53,
+  "Sem localização específica", 52,
+  "Metástase em gânglios linfáticos", 47,
+  "Pulmões e brônquios", 38,
+  "Colo do útero", 34
+)
+
+# Tabela formatada
+df_maringa_top10 |>
+  kbl(
+    format = "latex",
+    booktabs = TRUE,
+    align = c("l", "c"),
+    caption = "Dez tipos de câncer mais frequentes em Maringá em 2024."
+  ) |>
+  kable_styling(
+    latex_options = c("hold_position", "scale_down"),
+    font_size = 10,
+    position = "center"
+  )
+
+
+```
+
+
+## Resultados 
+
+```{r tabela 4, cache=T}
+
+tabela_estagios <- tribble(
+  ~`Município`, ~`Estágio do câncer`, ~`Número de casos`, ~`Proporção`,
+  "Total",   "Estágio 0",   "56",  "0,055",
+  "Total",   "Estágio 1",   "80",  "0,079",
+  "Total",   "Estágio 2",  "296",  "0,292",
+  "Total",   "Estágio 3",  "324",  "0,320",
+  "Total",   "Estágio 4",  "257",  "0,254",
+  "Maringá", "Estágio 0",   "13",  "0,035",
+  "Maringá", "Estágio 1",   "32",  "0,087",
+  "Maringá", "Estágio 2",  "114",  "0,311",
+  "Maringá", "Estágio 3",  "121",  "0,330",
+  "Maringá", "Estágio 4",   "87",  "0,237"
+)
+
+tabela_estagios |>
+  kbl(
+    format = "latex",
+    booktabs = TRUE,
+    align = c("l", "c", "c", "c"),
+    caption = "Número de casos de câncer em 2024 por estágio (Total e Maringá).",
+    label = "estagios"
+  ) |>
+  kable_styling(
+    latex_options = c("hold_position", "scale_down"),
+    font_size = 10,
+    position = "center"
+  )
+
+
+```
+
+## Resultados 
+
+```{r diagnostico1, cache=T, fig.cap="\\label{fig:diagnostico1}Número de diagnósticos e inícios de tratamento por mês.", fig.align='center', fig.height=2.5, fig.width= 4.7, results='hide', dpi=300}
+
+# diagnostico e tratamento
+dados_diag <- tratam_munic_mesdiagnostico |>
+  pivot_longer(
+    cols = -munici_pio_da_residencia, 
+    names_to = "mes", 
+    values_to = "frequencia"
+  ) |>
+  mutate(tipo = "Diagnóstico")
+
+dados_trat <- tratam_munic_mestratam |>
+  pivot_longer(
+    cols = -munici_pio_da_residencia, 
+    names_to = "mes", 
+    values_to = "frequencia"
+  ) |>
+  mutate(tipo = "Início de Tratamento")
+
+dados_juntos <- bind_rows(dados_diag, dados_trat)
+
+dados_juntos <- dados_juntos |>
+  filter(mes != "total") |> 
+  mutate(
+    mes = dmy(paste0("01_", mes))  # Ex.: "01_jan_2024" vira 2024-01-01
+  )
+
+Sys.setlocale("LC_ALL", "Portuguese")
+
+
+dados_juntos |>
+  filter(munici_pio_da_residencia == "Total") |>
+  ggplot(aes(x = mes, y = frequencia, color = tipo)) +
+  geom_line(linewidth = 1) +
+  geom_point(size = 2) +
+  labs(x = "Mês", y = "Frequência", color = "Tipo") +
+  scale_color_manual(values = c("Diagnóstico" = "#22aaee", "Início de Tratamento" = "#e63946")) +
+  scale_y_continuous(limits = c(0, 750)) +
+  theme_bw() +
+  theme(axis.title.x = element_text(face = "bold"),
+        axis.title.y = element_text(face = "bold"))
+
+
+```
+
+## Resultados 
+
+```{r diagmaringa, cache=T, fig.cap="\\label{fig:diagmaringa}Número de diagnósticos e inícios de tratamento por mês (apenas Maringá).", fig.align='center', fig.height=2.5, fig.width= 4.7,dpi=300 }
+
+dados_juntos |>
+  filter(munici_pio_da_residencia == " Maringa") |>
+  ggplot(aes(x = mes, y = frequencia, color = tipo)) +
+  geom_line(linewidth = 1) +
+  geom_point(size = 2) +
+  labs(x = "Mês", y = "Frequência", color = "Tipo") +
+  scale_color_manual(values = c("Diagnóstico" = "#22aaee", "Início de Tratamento" = "#e63946")) +
+  scale_y_continuous(limits = c(0, 200)) +
+  theme_bw() +
+  theme(axis.title.x = element_text(face = "bold"),
+        axis.title.y = element_text(face = "bold"))
+
+
+
+```
+
+## Resultados 
+
+```{r custo, cache=T, fig.cap="\\label{fig:custo}Valor total aprovado pelo governo para realização de consultas e tratamentos oncológicos.", fig.height=2.5, fig.width= 4.7,dpi=300, fig.align='center'}
+
+valor_aprovado <- valor_aprovado |> 
+  rename(
+    jan = janeiro,
+    fev = fevereiro,
+    mar = marco,
+    abr = abril,
+    mai = maio,
+    jun = junho,
+    jul = julho,
+    ago = agosto,
+    set = setembro,
+    out = outubro,
+    nov = novembro,
+    dez = dezembro
+  )
+
+dados_valor_aprovado <- valor_aprovado |> 
+  select(-total) |>   
+  pivot_longer(
+    cols = -municipio,
+    names_to = "mes",
+    values_to = "valor_aprovado"
+  ) |> 
+  mutate(
+    mes_num = as.integer(factor(mes, 
+      levels = c("jan", "fev", "mar", "abr", "mai", "jun",
+                 "jul", "ago", "set", "out", "nov", "dez"))),
+    data = dmy(paste0("01/", mes_num, "/2024"))
+  )
+
+dados_valor_aprovado <- dados_valor_aprovado |> 
+  mutate(municipio = str_trim(municipio))
+
+dados_valor_aprovado |> 
+  filter(municipio == "Total") |> 
+  ggplot(aes(x = data, y = valor_aprovado, group = municipio, 
+             color = municipio)) +
+    geom_line(linewidth = 1, colour = "#22aaee") +
+    geom_point(size = 2, colour = "#22aaee") +
+    labs(x = "Mês", y = "Valor Aprovado (em R$)", color = "Município") +
+  theme_bw() +
+  theme(axis.title.x = element_text(face = "bold"),
+        axis.title.y = element_text(face = "bold"))
+
+```
+
+
+## Resultados 
+
+
+
+```{r custo2, cache=T, fig.cap="\\label{fig:custo2}Valores aprovados pelo governo para realização de consultas e tratamentos oncológicos: Comparação entre Maringá e os demais municípios.", fig.align='center',  fig.height=2.2, fig.width= 4.7,dpi=300}
+
+dados_maringa <- dados_valor_aprovado |> 
+  filter(municipio == "Maringa")
+
+dados_outros <- dados_valor_aprovado |> 
+  filter(!municipio %in% c("Maringa", "Total")) |>
+  group_by(mes, mes_num) |>
+  summarise(valor_aprovado = sum(valor_aprovado, na.rm = TRUE), .groups = "drop") |>
+  mutate(municipio = "Demais municípios", data = dmy(paste0("01/", mes_num, "/2024")))
+
+dados_comparacao <- bind_rows(dados_maringa, dados_outros)
+
+dados_comparacao <- dados_comparacao |> 
+  mutate(municipio = ifelse(municipio == "Maringa", "Maringá", municipio))
+
+ggplot(dados_comparacao, aes(x = data, y = valor_aprovado, color = municipio, group = municipio)) +
+  geom_line(linewidth = 1) +
+  geom_point(size = 2) +
+  labs(x = "Mês", y = "Valor Aprovado (em R$)", color = "Município") +
+  theme_bw() +
+  theme(axis.title.x = element_text(face = "bold"),
+        axis.title.y = element_text(face = "bold"))
+
+```
+
+## Resultados 
+
+```{r dispersao1, cache=T, fig.cap="\\label{fig:dispersao1}Número de casos diagnosticados vs Valor aprovado (por município em 2024).", fig.height=2.5, fig.width= 4.7,dpi=300, fig.align='center'}
+
+valor_aprovado <- valor_aprovado |> 
+  mutate(municipio = str_trim(municipio))
+tratam_munic_mesdiagnostico <- tratam_munic_mesdiagnostico |> 
+  mutate(munici_pio_da_residencia = str_trim(munici_pio_da_residencia))
+
+casos_diagnosticados <- tratam_munic_mesdiagnostico |> 
+  rename(municipio = munici_pio_da_residencia) |> 
+  select(municipio, total)
+
+
+valor_diagnostico <- left_join(valor_aprovado |> select(municipio, total), 
+                               casos_diagnosticados, by = "municipio")
+
+valor_diagnostico |> 
+  filter(municipio != "Total") |> 
+  ggplot(aes(x = total.y, y = total.x, label = municipio)) +
+  geom_point(color = "red", size = 1) +
+    geom_smooth(method = "lm", se = FALSE, color = "blue", linetype = "dashed", size = 0.3) +
+  labs(
+      x = "Número de casos diagnosticados",
+      y = "Valor aprovado (em R$)") +
+  theme_bw() +
+  theme(axis.title.x = element_text(face = "bold"),
+        axis.title.y = element_text(face = "bold"))
+
+
+```
+
+
+
+# Conclusões
+
+## Conclusões
+
+* O estudo oferece panorama importante do cenário oncológico regional
+* Maringá cumpre adequadamente seu papel de centro de referência
+* Há evidências de melhorias no sistema ao longo de 2024
+* Necessidade de investimento em diagnóstico precoce
+* Necessidade de programas de rastreamento mais eficazes
+
+
+
+# Referências
+
